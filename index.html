@@ -1,0 +1,118 @@
+<!doctype html>
+<html>
+<head>
+    <title>LocalChat</title>
+</head>
+
+<style>
+    body {
+        margin: 0;
+    }
+    #queue {
+        position: absolute;
+        max-height: 95%;
+        max-height: calc(100% - 3em);
+        overflow: auto;
+        padding: .5em;
+    }
+    .writer {
+        position: absolute;
+        bottom: 0;
+        margin: .5em;
+    }
+</style>
+
+<body>
+
+<div id="queue"></div>
+<div class="writer">
+    <input id="input" type="text"/>
+    <button id="submit">Send</button>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+    var MAX_LENGTH = 100;
+
+    var socket = io('http://localhost:3030');
+
+    socket.on('connect', sendLocation);
+
+    socket.on('location', function(location) {
+        console.log(location);
+        post(location);
+    });
+
+    socket.on('message', function(data) {
+        console.log(data);
+        var msg = now(data.sent) + ' ' + data.message;;
+        console.log(msg);
+
+
+        if (data.you) {
+            msg = now(data.sent) + ' <em>' + data.message + '</em>';
+        }
+
+        post(msg);
+    });
+
+    function send(msg) {
+        socket.emit('message', msg);
+    }
+
+    function now(time) {
+        var date = time ? new Date(time) : new Date();
+        return date.toLocaleTimeString();
+    }
+
+    function sendLocation() {
+        var _watch = navigator.geolocation.watchPosition(success, failure);
+
+        function success(position) {
+            console.log(position);
+            navigator.geolocation.clearWatch(_watch);
+            socket.emit('location', position);
+        }
+
+        function failure(error) {
+            navigator.geolocation.clearWatch(_watch);
+            console.log(error, error.code);
+        }
+    }
+
+    var queue = [];
+
+    function post(message) {
+        if (queue.length > MAX_LENGTH) {
+            queue.shift();
+        }
+        queue.push(message);
+        render();
+    }
+
+    var $ = document.getElementById.bind(document);
+
+    var $queue  = $('queue');
+    var $input  = $('input');
+    var $submit = $('submit');
+
+    $input.addEventListener('keyup', function(e) {
+        if (e.which === 13) {
+            send($input.value);
+            $input.value = '';
+        }
+    });
+
+    $submit.addEventListener('click', function() {
+        send($input.value);
+        $input.value = '';
+    });
+
+    function render() {
+        $queue.innerHTML = queue.join('</br>');
+        $input.value = '';
+    }
+
+</script>
+</body>
+</html>
