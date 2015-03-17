@@ -26,19 +26,23 @@ var sockets = [];
 io.on('connection', function (socket) {
     sockets.push(socket);
 
-    socket.on('location', function (location) {
-        console.log(location);
-        lookupName(location, function(name) {
-            var count = countUsersAtLocation(name);
-            socket.location = name;
-            var message = 'You are in ' + name + '.';
-            if (count) {
-                message += ' Chatting with ' + count + ' other user' + (count === 1 ? '' : 's') + '.';
-            } else {
-                message += ' You\'re the only one here.';
-            }
-            socket.emit('location', message);
+    socket.on('get location', function (position) {
+        console.log(position);
+        getLocation(position, function(location) {
+            socket.emit('get location', location);
         });
+    });
+
+    socket.on('set location', function(location) {
+        var count = countUsersAtLocation(location.code);
+        socket.location = location.code;
+        var message = 'You are in ' + location.name + '.';
+        if (count) {
+            message += ' Chatting with ' + count + ' other user' + (count === 1 ? '' : 's') + '.';
+        } else {
+            message += ' You\'re the only one here.';
+        }
+        socket.emit('set location', message);
     });
 
     socket.on('message', function(msg) {
@@ -53,9 +57,10 @@ io.on('connection', function (socket) {
 
 // Counts the users at the selected location and removes disconnected users in the process
 function countUsersAtLocation(name) {
-    var count= 0;
+    var count = 0;
     var connected = [];
     for (var i = 0; i < sockets.length; i++) {
+        // Remove references to disconnected sockets at the same time
         if (sockets[i].connected) {
             connected.push(sockets[i]);
             if (sockets[i].location === name) count++;
@@ -67,12 +72,11 @@ function countUsersAtLocation(name) {
 
 function sendMessage(sender, msg) {
     sockets.forEach(function(socket) {
-        if (socket.location === sender.location) {
-            if (socket === sender) {
-                msg.you = true;
-            } else {
-                msg.you = false;
-            }
+        // Maybe try simple equality before regex
+        // Todo: More rigorous regex
+        if (sender.location && sender.location.match(socket.location)) {
+            msg.you       = socket === sender;
+            msg.sameLevel = sender.location === socket.location;
             socket.emit('message', msg);
         }
     });
@@ -95,6 +99,12 @@ function lookupLocation(position, cb) {
                 cb && cb(err, null);
             }
         });
+    });
+}
+
+function getLocation(position, cb) {
+    lookupLocation(position, function(err, res) {
+        cb && cb(res.results[0].address_components);
     });
 }
 

@@ -24,6 +24,7 @@
 
 <body>
 
+<select id="location"></select>
 <div id="queue"></div>
 <div class="writer">
     <input id="input" type="text"/>
@@ -36,25 +37,58 @@
 
     var socket = io('http://localhost:3030');
 
-    socket.on('connect', sendLocation);
+    socket.on('connect', getLocation);
 
-    socket.on('location', function(location) {
+    socket.on('set location', function(location) {
         console.log(location);
         post(location);
     });
 
+    socket.on('get location', function(location) {
+        var locations = location.slice(1,location.length-1).reverse().reduce(function(l, n, i) {
+            l.push({
+                name: n.long_name,
+                code: (l[i-1] ? l[i-1].code + ' ' : '') + n.short_name
+            });
+            return l;
+        }, []);
+        updateSelector(locations);
+        socket.emit('set location', locations[locations.length-2] || locations[locations.length-1]);
+    });
+
     socket.on('message', function(data) {
         console.log(data);
-        var msg = now(data.sent) + ' ' + data.message;;
+        var msg = now(data.sent) + ' ' + data.message;
         console.log(msg);
 
-
         if (data.you) {
+            msg = now(data.sent) + ' <strong>' + data.message + '</strong>';
+        }
+
+        if (!data.sameLevel) {
             msg = now(data.sent) + ' <em>' + data.message + '</em>';
         }
 
         post(msg);
     });
+
+    var $selector = document.getElementById('location');
+
+    $selector.addEventListener('change', function(e) {
+        var name = $selector.selectedOptions[0].innerText;
+        var code = $selector.value;
+        socket.emit('set location', {
+            name: name,
+            code: code
+        });
+    });
+
+    function updateSelector(locations) {
+        $selector.innerHTML = locations.map(function(n) {
+            return '<option value="' + n.code + '">' + n.name + '</option>';
+        });
+        $selector.selectedIndex = $selector.options.length - 2;
+    }
 
     function send(msg) {
         socket.emit('message', msg);
@@ -65,13 +99,13 @@
         return date.toLocaleTimeString();
     }
 
-    function sendLocation() {
+    function getLocation() {
         var _watch = navigator.geolocation.watchPosition(success, failure);
 
         function success(position) {
             console.log(position);
             navigator.geolocation.clearWatch(_watch);
-            socket.emit('location', position);
+            socket.emit('get location', position);
         }
 
         function failure(error) {
