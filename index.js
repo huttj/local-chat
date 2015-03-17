@@ -1,4 +1,3 @@
-
 var https = require('https');
 var app = require('http').createServer(handler);
 var io = require('socket.io')(app);
@@ -7,6 +6,8 @@ var fs = require('fs');
 var API_KEY = require('./config.js').API_KEY;
 
 app.listen(3030);
+
+console.log('Listening for requests on port 3030...');
 
 function handler (req, res) {
     fs.readFile(__dirname + '/index.html',
@@ -74,7 +75,7 @@ function sendMessage(sender, msg) {
     sockets.forEach(function(socket) {
         // Maybe try simple equality before regex
         // Todo: More rigorous regex
-        if (sender.location && sender.location.match(socket.location)) {
+        if (sender.location && sender.location.match(socket.location) || socket.location.match(sender.location)) {
             msg.you       = socket === sender;
             msg.sameLevel = sender.location === socket.location;
             socket.emit('message', msg);

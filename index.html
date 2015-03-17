@@ -2,6 +2,7 @@
 <html>
 <head>
     <title>LocalChat</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
 </head>
 
 <style>
@@ -11,9 +12,10 @@
     #queue {
         position: absolute;
         max-height: 95%;
-        max-height: calc(100% - 3em);
+        max-height: calc(100% - 4em);
         overflow: auto;
         padding: .5em;
+        word-break: break-word;
     }
     .writer {
         position: absolute;
@@ -34,8 +36,7 @@
 <script src="/socket.io/socket.io.js"></script>
 <script>
     var MAX_LENGTH = 100;
-
-    var socket = io('http://localhost:3030');
+    var socket = io('http://107.170.252.81:3030');
 
     socket.on('connect', getLocation);
 
