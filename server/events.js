@@ -32,7 +32,7 @@ Events.register = function authenticate(socket, payload, callback) {
             if (callback) {
                 callback(response.payload);
 
-            // Otherwise, use the socket
+                // Otherwise, use the socket
             } else {
                 socket.send(response);
             }
@@ -50,11 +50,45 @@ Events.register = function authenticate(socket, payload, callback) {
         });
 };
 
-Events.setPushKey   = function setPushKey(socket, payload) {
+Events.login = function login() {
+
+};
+
+Events.authenticate = function authenticate(socket, payload, callback) {
+    var response = {
+        event: 'authenticate',
+        status: 'success'
+    };
+
+    // Todo: User long-form `userId` and `locationId` everywhere; it's way easier to remember
+    Broker.authenticate(payload.userId).then(function () {
+        if (callback) {
+            callback(true);
+        } else {
+            socket.send(response);
+        }
+        Broker.notifyUsersLocation(payload.userId, {
+            event: 'userOnline',
+            payload: {
+                userId: payload.userId
+            }
+        });
+    }).catch(function (e) {
+        response.status = 'failed';
+        response.message = (e && e.message) || e;
+        if (callback) {
+            callback(false);
+        } else {
+            socket.send(response);
+        }
+    });
+};
+
+Events.setPushKey = function setPushKey(socket, payload) {
     pusher.registerKey(payload);
 };
 
-Events.setLocation  = function setLocation(socket, payload) {
+Events.setLocation = function setLocation(socket, payload) {
 
     Mapper.lookupName(payload.coords)
         .then(setLocation)
@@ -87,6 +121,16 @@ Events.postToChat   = function postToChat(socket, payload) {};
 Events.sendMessage  = function sendMessage(socket, payload) {};
 Events.setNick      = function setNick(socket, payload) {};
 Events.refresh      = function refresh(socket, payload) {};
+
+Events.disconnect   = function disconnect(socket, payload) {
+    // Notify location to make sure user not visible in "who's here"
+    Broker.notifyUsersLocation(payload.userId, {
+        event: 'userOffline',
+        payload: {
+            userId: payload.userId
+        }
+    });
+};
 
 io.on('connection', function addListener(socket) {
 
@@ -122,8 +166,6 @@ io.on('connection', function addListener(socket) {
     });
 
 });
-
-
 
 module.exports = function attachEvents(_app, _DB, _Broker, _Pusher, _Mapper) {
     io      = _app.io;
