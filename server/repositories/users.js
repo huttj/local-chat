@@ -1,4 +1,4 @@
-var DB, r;
+//var r = require('rethinkdb');
 var CONST = require('./../constants');
 var hmac = (function () {
     var crypto = require('crypto-js/hmac-sha256');
@@ -6,99 +6,98 @@ var hmac = (function () {
         return crypto(message, key).toString()
     }
 })();
+var DB;
 
 var Users = {};
 
 Users.register = function(username, position) {
+
+    // Set up row data
     username = username || generateUsername();
     var secret = rand(6);
     var salt = rand(64);
-
     var row = {
         username: username,
         hash: hmac(secret, salt),
         salt: salt
     };
-
     if (position) row.createdAt = position;
+    if (position) row.loggedInAt = position;
 
-    return DB.load(function(r) {
-        return exists()
-            .then(makeUser)
-            .then(doubleCheckAvailability);
+    // Execute query
+    return exists()
+        .then(makeUser)
+        .then(doubleCheckAvailability);
 
-        // Shorthand for checking if the username or secret is in use
-        function exists(n) {
-            return DB.exec(table(r).getAll(row.username, {index: 'username'}).count().gt(n || 0))
-                .then(function (taken) {
-                    if (taken) throw 'Username is in use!';
-                })
-        }
+    // Shorthand for checking if the username or secret is in use
+    function exists(n) {
+        return DB.exec(table(r).getAll(row.username, {index: 'username'}).count().gt(n || 0))
+            .then(function (taken) {
+                if (taken) throw 'Username is in use!';
+            })
+    }
 
-        function makeUser() {
-            row.createdOn = Number(new Date());
-            row.lastLogin = Number(new Date());
-            return DB.exec(
-                table(r)
-                .insert(row)
-            );
-        }
+    // Add the user to the DB
+    function makeUser() {
+        row.createdOn  = Number(new Date());
+        row.lastLogin  = Number(new Date());
+        row.loginCount = 1;
+        return DB.exec(table(r).insert(row));
+    }
 
-        // Check to see if the secret and username were taken in between the first check and creating
-        // Rare race condition
-        function doubleCheckAvailability() {
-            return exists(1)
-                .then(function () {
-                    return DB.exec(table(r).getAll(row.username, {index: 'username'}))
-                })
-                .then(DB.first)
-                .then(function(user) {
-                    user.secret = secret;
-                    return user;
-                });
-        }
-    });
+    // Check to see if the secret and username were taken in between the first check and creating
+    // Rare race condition
+    function doubleCheckAvailability() {
+        return exists(1)
+            .then(function () {
+                return DB.exec(table(r).getAll(row.username, {index: 'username'}))
+            })
+            .then(DB.first)
+            .then(function(user) {
+                user.secret = secret;
+                return user;
+            });
+    }
 };
 
-Users.authenticate = function(username, secret) {
+Users.authenticate = function(username, secret, position) {
 
     var AuthError = 'User not found, or secret did not match.';
 
-    return DB.load(function(r) {
+    return DB.exec(table(r).getAll(username, {index: 'username'}))
+        .then(DB.first)
+        .then(checkSecret)
+        .then(updateLoginData)
+        .then(cleanUp);
 
-        return DB.exec(table(r).getAll(username, {index: 'username'}))
-            .then(DB.first)
-            .then(checkSecret)
-            .then(addSession)
-            .then(cleanUp);
-
-        function checkSecret(user) {
-            if (!user || user.hash !== hmac(secret, user.salt)) {
-                throw new Error(AuthError);
-            }
-            return user;
+    // Check that the provided secret+salt matches the stored hash
+    function checkSecret(user) {
+        if (!user || user.hash !== hmac(secret, user.salt)) {
+            throw new Error(AuthError);
         }
+        return user;
+    }
 
-        function addSession(user) {
-            user.lastLogin = Number(new Date());
-            return DB
-                .exec(table(r).get(user.id).update(user))
-                .then(function() {
-                    return user;
-                });
+    // Update login date and save last login & location
+    function updateLoginData(user) {
+        user.lastLogin = Number(new Date());
+        user.loginCount = (Number(user.loginCount) || 0) + 1;
+        if (position) user.loggedInAt = position;
+        return DB
+            .exec(table(r).get(user.id).update(user))
+            .then(function() {
+                return user;
+            });
+    }
+
+    // Remove sensitive details from returned user object
+    function cleanUp(user) {
+        return {
+            userId     : user.id,
+            username   : user.username,
+            createdOn  : user.createdOn
         }
-
-        function cleanUp(user) {
-            return {
-                userId     : user.id,
-                username   : user.username,
-                createdOn  : user.createdOn,
-                sessionKey : user.sessionKey,
-                lastLogin  : user.lastLogin
-            }
-        }
-
-    });
+    }
 };
 
 Users.changeName = function(userId, name) {

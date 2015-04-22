@@ -24,7 +24,6 @@ module.exports = function connectToDb(config, _CONST) {
     // connect and return db instance
     var dbPromise = r.connect(options)
             .then(saveConnection)
-            .then(setupDb)
             .then(function() {
                 conn.use(CONST.DB);
                 return r;
@@ -57,38 +56,6 @@ module.exports = function connectToDb(config, _CONST) {
 
 function saveConnection(connection) {
     conn = connection;
-}
-
-function setupDb() {
-
-    r.dbList().run(conn)
-        .then(function(list) {
-            if (list.indexOf(CONST.DB) === -1) {
-                return r.dbCreate(CONST.DB).run(conn);
-            }
-        })
-        .then(function() {
-            conn.use(CONST.DB);
-        })
-        .then(createTables)
-        .then(addIndexes);
-
-    function createTables() {
-        r.tableList()
-            .run(conn)
-            .then(function (tableList) {
-                Object.keys(CONST.TABLES).forEach(function(table) {
-                    if (tableList.indexOf(CONST.TABLES[table]) === -1) {
-                        console.log('Creating table', CONST.TABLES[table]);
-                        r.tableCreate(CONST.TABLES[table]).run(conn);
-                    }
-                });
-            });
-    }
-
-    function addIndexes() {
-        r.table(CONST.TABLES.USERS).indexCreate('secret').run(conn).catch(nil);
-    }
 }
 
 function first(cursor) {

@@ -4,34 +4,57 @@ var Broker; // To manage clients and message passing between them
 var Pusher; // To register push keys
 var Mapper; // To reverse geocode to identify locations
 
-var events = {};
+var Events = {};
 
 /**
  * Register the client for the first time
  * @param socket
  * @param payload
  */
-events.authenticate = function authenticate(socket, payload) {
+Events.register = function authenticate(socket, payload, callback) {
+
+    var response = {
+        event: 'register',
+        status: 'success'
+    };
 
     // not registered; generate new secret and session key and send to client
-    DB.register(payload.username)
-        .then(addUser)
-        .then(socket.send(response));
+    DB.Users.register(payload.username)
+        .then(function addUser(user) {
+            // Add user to Broker
+            user.socket = socket;
+            Broker.addUser(user);
 
-    function success(payload) {
+            // Notify user
+            response.payload = user;
 
-    }
-    function failure(payload) {
-        socket.send()
-    }
+            // If there's a recipt callback, use it
+            if (callback) {
+                callback(response.payload);
 
+            // Otherwise, use the socket
+            } else {
+                socket.send(response);
+            }
+        })
+        .catch(function registerFailed(e) {
+            response.status = 'failed';
+            response.message = e;
+            delete response.payload;
+
+            if (callback) {
+                callback();
+            } else {
+                socket.send(response);
+            }
+        });
 };
 
-events.setPushKey   = function setPushKey(socket, payload) {
+Events.setPushKey   = function setPushKey(socket, payload) {
     pusher.registerKey(payload);
 };
 
-events.setLocation  = function setLocation(socket, payload) {
+Events.setLocation  = function setLocation(socket, payload) {
 
     Mapper.lookupName(payload.coords)
         .then(setLocation)
@@ -60,12 +83,12 @@ events.setLocation  = function setLocation(socket, payload) {
     }
 };
 
-events.postToChat   = function postToChat(socket, payload) {};
-events.sendMessage  = function sendMessage(socket, payload) {};
-events.setNick      = function setNick(socket, payload) {};
-events.refresh      = function refresh(socket, payload) {};
+Events.postToChat   = function postToChat(socket, payload) {};
+Events.sendMessage  = function sendMessage(socket, payload) {};
+Events.setNick      = function setNick(socket, payload) {};
+Events.refresh      = function refresh(socket, payload) {};
 
-io.on('connection', function (socket) {
+io.on('connection', function addListener(socket) {
 
     // Double-check
     if (socket.send) throw 'socket.send() already exists';
@@ -75,7 +98,7 @@ io.on('connection', function (socket) {
         socket.emit('event', packet, callback);
     };
 
-    socket.on('event', function (packet) {
+    socket.on('event', function (packet, callback) {
         // check that packet is valid (has event, packet, etc)
         if (!packet.type || !packet.payload) {
             // Silently ignore
@@ -92,9 +115,9 @@ io.on('connection', function (socket) {
         if (!authenticate(packet)) return;
 
         // check that event type is supported
-        if (events[packet.type]) {
+        if (Events[packet.type]) {
             // Execute event
-            events[packet.type](socket, packet.payload);
+            Events[packet.type](socket, packet.payload, callback);
         }
     });
 
@@ -108,4 +131,5 @@ module.exports = function attachEvents(_app, _DB, _Broker, _Pusher, _Mapper) {
     Broker  = _Broker;
     Pusher  = _Pusher;
     Mapper = _Mapper;
+    return
 };

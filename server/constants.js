@@ -1,8 +1,15 @@
 module.exports = {
-    DB: 'LocalChat',
-    TABLES: {
-        USERS: 'Users',
-        CHATS: 'Chats',
-        MESSAGES: 'Messages'
+    DB: {
+        NAME: 'LocalChat',
+        TABLES: {
+            USERS: 'Users',
+            CHATS: 'Chats',
+            MESSAGES: 'Messages'
+        },
+        INDEXES: {
+            USERS: ['username'],
+            CHATS: [],
+            MESSAGES: []
+        }
     }
 };
