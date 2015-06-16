@@ -1,17 +1,18 @@
 var io; // To attach event listeners to the incoming socket
 var DB; // To interact with the data store
-var Broker; // To manage clients and message passing between them
-var Pusher; // To register push keys
+var log = require('./log');
 var Mapper; // To reverse geocode to identify locations
 
+/**
+ * Each event function is called with a `this` that has
+ *
+ */
 var Events = {};
 
 /**
  * Register the client for the first time
- * @param socket
- * @param payload
  */
-Events.register = function authenticate(socket, payload, callback) {
+Events.register = function register(socket, payload, callback) {
 
     var response = {
         event: 'register',
@@ -19,16 +20,13 @@ Events.register = function authenticate(socket, payload, callback) {
     };
 
     // not registered; generate new secret and session key and send to client
-    DB.Users.register(payload.username)
+    DB.Users
+        .register(payload.username)
         .then(function addUser(user) {
-            // Add user to Broker
-            user.socket = socket;
-            Broker.addUser(user);
-
             // Notify user
             response.payload = user;
 
-            // If there's a recipt callback, use it
+            // If there's a receipt callback, use it
             if (callback) {
                 callback(response.payload);
 
@@ -50,7 +48,7 @@ Events.register = function authenticate(socket, payload, callback) {
         });
 };
 
-Events.login = function login() {
+Events.login = function login(socket, payload, callback) {
 
 };
 
@@ -84,8 +82,8 @@ Events.authenticate = function authenticate(socket, payload, callback) {
     });
 };
 
-Events.setPushKey = function setPushKey(socket, payload) {
-    pusher.registerKey(payload);
+Events.setPushKey = function setPushKey() {
+    DB.registerKey(payload);
 };
 
 Events.setLocation = function setLocation(socket, payload) {
@@ -117,61 +115,62 @@ Events.setLocation = function setLocation(socket, payload) {
     }
 };
 
-Events.postToChat   = function postToChat(socket, payload) {};
-Events.sendMessage  = function sendMessage(socket, payload) {};
-Events.setNick      = function setNick(socket, payload) {};
-Events.refresh      = function refresh(socket, payload) {};
+Events.postToChat   = function postToChat() {};
+Events.setNick      = function setNick() {};
+Events.refresh      = function refresh() {};
 
-Events.disconnect   = function disconnect(socket, payload) {
+Events.disconnect   = function disconnect() {
     // Notify location to make sure user not visible in "who's here"
-    Broker.notifyUsersLocation(payload.userId, {
+    Broker.notifyUsersLocation(this.payload.userId, {
         event: 'userOffline',
         payload: {
-            userId: payload.userId
+            userId: this.payload.userId
         }
     });
 };
 
-io.on('connection', function addListener(socket) {
-
-    // Double-check
-    if (socket.send) throw 'socket.send() already exists';
-
-    // Clean method to send message to user
-    socket.send = function send(packet, callback) {
-        socket.emit('event', packet, callback);
-    };
-
-    socket.on('event', function (packet, callback) {
-        // check that packet is valid (has event, packet, etc)
-        if (!packet.type || !packet.payload) {
-            // Silently ignore
-            return;
-            //socket.emit('event', {
-            //    type: packet.type || 'none',
-            //    payload: packet,
-            //    message: 'Invalid request received',
-            //    success: false
-            //});
-        }
-
-        // Check that the session is valie
-        if (!authenticate(packet)) return;
-
-        // check that event type is supported
-        if (Events[packet.type]) {
-            // Execute event
-            Events[packet.type](socket, packet.payload, callback);
-        }
-    });
-
-});
-
-module.exports = function attachEvents(_app, _DB, _Broker, _Pusher, _Mapper) {
+module.exports = function attachEvents(_app, _DB, _Mapper) {
     io      = _app.io;
     DB      = _DB;
-    Broker  = _Broker;
-    Pusher  = _Pusher;
-    Mapper = _Mapper;
-    return
+    Mapper  = _Mapper;
+
+    io.on('connection', function addListener(socket) {
+
+        log('new client', socket.id, socket.request.connection.remoteAddress);
+
+        // Double-check
+        if (!socket.send) {
+            // Clean method to send message to user
+            socket.send = function send(packet, callback) {
+                socket.emit('event', packet, callback);
+            };
+        }
+
+        socket.on('event', function (packet, callback) {
+            // check that packet is valid (has event, packet, etc)
+            if (!packet.type || !packet.payload) {
+                // Silently ignore
+                return;
+                //socket.emit('event', {
+                //    type: packet.type || 'none',
+                //    payload: packet,
+                //    message: 'Invalid request received',
+                //    success: false
+                //});
+            }
+
+            // Check that the session is valid
+            if (!authenticate(packet)) return;
+
+            // check that event type is supported
+            if (Events[packet.type]) {
+                // Execute event
+                Events[packet.type](socket, packet.payload, callback);
+            }
+        });
+
+    });
+
+    log('Events loaded');
+
 };

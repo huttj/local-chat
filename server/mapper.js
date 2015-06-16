@@ -1,14 +1,14 @@
-var https = require('https');
-var assert = require('assert');
+var https   = require('https');
+var assert  = require('assert');
 var Promise = require('bluebird');
+var log     = require('./log');
 
 var API_KEY;
 
 var Mapper = {};
 
 Mapper.lookupLocation = function lookupLocation(coords, callback) {
-    return new Promise(function(resolve, reject) {
-        try {
+    return Promise.try(function(resolve, reject) {
             // Check for invalid values
             if (!coords || !coords.latitude || !coords.longitude) throw ('`coords` object must have latitude and longitude properties');
             if (Math.abs(coords.latitude) > 90 || Math.abs(coords.longitude) > 180) throw ('latitude must be between -90 to 90, longitude between -180 and 180');
@@ -28,9 +28,6 @@ Mapper.lookupLocation = function lookupLocation(coords, callback) {
                     }
                 });
             });
-        } catch (e) {
-            reject(e);
-        }
     }).nodeify(callback);
 };
 
@@ -70,5 +67,6 @@ function getPlace(components) {
 
 module.exports = function initLocator(_config) {
     API_KEY = _config.API_KEY;
+    log('Mapper loaded');
     return Mapper;
 };

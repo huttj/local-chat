@@ -1,16 +1,17 @@
 var https = require('https');
-var app = require('http').createServer(handler);
-var io = require('socket.io')(app);
-var fs = require('fs');
+var app   = require('http').createServer(handler);
+var io    = require('socket.io')(app);
+var fs    = require('fs');
+var log   = require('./log');
 
 var config;
 
-var API_KEY = require('./config.js').API_KEY;
-
 function handler (req, res) {
-    fs.readFile(__dirname + '/index.html',
-        function (err, data) {
+    log('GET', req.url);
+    fs.readFile(__dirname + '/../index.html',
+        function sendFile(err, data) {
             if (err) {
+                log(err.message);
                 res.writeHead(500);
                 return res.end('Error loading index.html');
             }
@@ -23,8 +24,10 @@ function handler (req, res) {
 module.exports = function createServer(_config) {
     config = _config;
     return {
-        start: function(port) {
-            app.listen(3030, console.log.bind(console, 'listening on ' + port));
+        start: function start(port) {
+            app.listen(port, function() {
+                log('listening on ' + port);
+            });
         },
         io: io
     };

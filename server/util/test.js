@@ -1,4 +1,4 @@
-var DB = require('./db')(null, {
+var DB = require('./../db')(null, {
     DB: 'LocalChat',
     TABLES: {
         USERS: 'Users',
@@ -19,9 +19,12 @@ function end() {
 
 //DB.Users.register('Anon222222').then(log).catch(fail);
 
-//DB.Users.register().then(log).catch(fail);
+var i = 100;
+while (i--) {
+    DB.Users.register().then(log).catch(fail);
+}
 
-DB.Users.authenticate('Anon222222', 'yOVG9Q').then(success).catch(fail).finally(end);
+//DB.Users.authenticate('Anon222222', 'yOVG9Q').then(success).catch(fail).finally(end);
 
 //DB.Users.authenticate('EU9WKd', '2064864807').then(success).catch(fail).finally(end);
 //DB.Users.addPhone('f30d58a4-e9f2-4376-8fee-dad94d33d0a1', '2064864812').then(success).catch(fail).finally(end);

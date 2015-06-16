@@ -51,7 +51,7 @@ Location.prototype.notify = function notify(payload, callback) {
         }
 
         // When sending succeeds or fails for all, we are done
-        return Promise.all(sent).catch(nil).then(function() {
+        return Promise.settle(sent).then(function() {
             // sent to this many users
             return sent.length;
         });

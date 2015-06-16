@@ -1,11 +1,12 @@
 var DB;
 var CONST = require('./../constants');
-var Chats= {};
+var Messages = {};
 
-Chats.post = function(userId, chat, location) {
+Messages.send = function(senderId, recipientId, message, location) {
     var payload = {
-        userId: userId,
-        chat: chat,
+        senderId: senderId,
+        recipientId: recipientId,
+        message: message,
         location: location,
         sentOn: Number(new Date())
     };
@@ -17,7 +18,7 @@ Chats.post = function(userId, chat, location) {
     });
 };
 
-Chats.getPosts = function(location) {
+Messages.getMessages = function() {
     return DB.load(function (r) {
         return DB.exec(
             table(r)
@@ -40,7 +41,7 @@ Chats.getPosts = function(location) {
     })
 };
 
-Chats.watchPosts = function(location) {
+Messages.watchPosts = function(location) {
     return DB.load(function (r) {
         return DB.exec(
             table(r)
@@ -65,11 +66,11 @@ Chats.watchPosts = function(location) {
 };
 
 function table(r) {
-    return r.db(CONST.DB).table(CONST.TABLES.CHATS);
+    return r.db(CONST.DB).table(CONST.TABLES.MESSAGES);
 }
 
 module.exports = function(_DB, _helpers) {
     DB      = _DB;
     helpers = _helpers;
-    return Chats;
+    return Messages;
 };

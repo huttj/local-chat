@@ -1,5 +1,5 @@
-//var r = require('rethinkdb');
-var CONST = require('./../constants');
+var r = require('rethinkdb');
+var CONST = require('../constants');
 var hmac = (function () {
     var crypto = require('crypto-js/hmac-sha256');
     return function(message, key) {
@@ -13,10 +13,10 @@ var Users = {};
 Users.register = function(username, position) {
 
     // Set up row data
-    username = username || generateUsername();
+    username   = username || generateUsername();
     var secret = rand(6);
-    var salt = rand(64);
-    var row = {
+    var salt   = rand(64);
+    var row    = {
         username: username,
         hash: hmac(secret, salt),
         salt: salt
@@ -166,7 +166,7 @@ Users.addPhone = function(userId, number) {
 };
 
 function table(r) {
-    return r.db(CONST.DB).table(CONST.TABLES.USERS);
+    return r.db(CONST.DB.NAME).table(CONST.DB.TABLES.USERS);
 }
 
 function rand(len, complex) {
