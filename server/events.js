@@ -19,41 +19,43 @@ Events.register = function register(socket, packet, callback) {
     };
 
     // not registered; generate new secret and session key and send to client
-    DB.Users
-        .register(payload.username)
-        .then(function addUser(user) {
-            log('created user', user);
-            socket.user = {
-                userId     : user.userId,
-                username   : user.username,
-                sessionKey : user.sessionKey
-            };
+    DB.Users.register(payload.username)
+        .then(addUserToSocket)
+        .then(success)
+        .catch(failure);
 
-            // Notify user
+    function addUserToSocket(user) {
+        log('created user', user);
+        socket.user = {
+            userId     : user.userId,
+            username   : user.username,
+            sessionKey : user.sessionKey
+        };
+        return user;
+    }
+
+    function success(user) {
+        log('user registered', user.username);
+        if (packet.callback) {
+            callback(null, user);
+        } else {
             response.payload = user;
             response.success = true;
+            socket.send(response);
+        }
+    }
 
-            // If there's a receipt callback, use it
-            if (packet.callback) {
-                callback(null, response.payload);
-
-                // Otherwise, use the socket
-            } else {
-                socket.emit('register', response);
-            }
-        })
-        .catch(function registerFailed(e) {
-            log('register failed', e);
-
+    function failure(err) {
+        log('register failed', err.message || err);
+        if (packet.callback) {
+            callback(err.message || err);
+        } else {
             response.success = false;
-            response.message = e;
+            response.message = err.message || err;
+            socket.send(response);
+        }
+    }
 
-            if (packet.callback) {
-                callback(e);
-            } else {
-                socket.emit('register', response);
-            }
-        });
 };
 
 /**
@@ -91,7 +93,7 @@ Events.authenticate = function authenticate(socket, packet, callback) {
  * Todo(Joshua)
  */
 Events.setPushKey = function setPushKey() {
-    DB.registerKey(payload);
+    DB.Settings.registerKey(payload);
 };
 
 /**
@@ -165,6 +167,8 @@ Events.setLocation = function setLocation(socket, packet, callback) {
 
     }
 
+    // Todo(Joshua): Regularize all of the success/failure callbacks
+    // Maybe define globally and bind to context?
     function notify(locationData) {
         if (packet.callback) {
             callback(locationData);
@@ -200,13 +204,19 @@ Events.sendChat = function sendChat(socket, packet, callback) {
     var location = socket.user.location;
 
     if (!location) {
-        return failure(new Error('You cannot send a chat until your location is available.'));
+
+        failure(new Error('You cannot send a chat until your location is available.'));
+
     } else if (!body) {
-        return failure(new Error('You cannot send an empty chat.'));
+
+        failure(new Error('You cannot send an empty chat.'));
+
     } else {
+
         DB.Chats.sendChat(userId, body, location)
             .then(success)
             .catch(failure);
+
     }
 
     function success() {
@@ -220,7 +230,7 @@ Events.sendChat = function sendChat(socket, packet, callback) {
     }
 
     function failure(err) {
-        log('chat send failed', err.stack);
+        log('chat send failed', err.stack || err);
         if (packet.callback) {
             callback(err);
         } else {
@@ -241,10 +251,19 @@ Events.changeUsername = function changeUsername(socket, packet, callback) {
     var username = packet.username;
     var newName  = payload;
 
-    DB.Users.changeUsername(userId, newName)
-        .then(setUsername)
-        .then(success)
-        .catch(failure);
+    if (username === socket.user.username) {
+
+        var message = 'Your username is already set to ' + username + '.';
+        failure(message);
+
+    } else {
+
+        DB.Users.changeUsername(userId, newName)
+            .then(setUsername)
+            .then(success)
+            .catch(failure);
+
+    }
 
     function setUsername() {
         socket.user.username = newName;
@@ -252,7 +271,6 @@ Events.changeUsername = function changeUsername(socket, packet, callback) {
 
     function success() {
         log('username changed', socket.user.username);
-        // Todo(Joshua): Figure out why Socket.io thinks there's a callback here
         if (packet.callback) {
             callback(null, newName);
         } else {
@@ -263,15 +281,16 @@ Events.changeUsername = function changeUsername(socket, packet, callback) {
     }
 
     function failure(err) {
-        log('username change failed', err.stack);
+        log('username change failed', err.stack || err);
         if (packet.callback) {
-            callback(err);
+            callback(err.message || err);
         } else {
             response.success = false;
             response.message = (err.message || err);
             socket.send(response);
         }
     }
+
 };
 
 Events.refresh = function refresh() {};

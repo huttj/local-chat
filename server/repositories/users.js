@@ -64,53 +64,12 @@ Users.authenticate = function(userId, sessionKey) {
 
 Users.changeUsername = function(userId, name) {
 
-    var SameNameError = 'Your username is already set to ' + name + '.';
-    var AlreadyTakenError = 'The username ' + name + ' is currently in use!';
+    var checkAvailability = table(r).filter({username: name}).count().gt(1);
+    var reportInUse       = r.error('The username ' + name + ' is currently in use!');
+    var changeName        = table(r).get(userId).update({username: name});
 
-    return (
-        checkUsername()
-        .then(changeUsername)
-        .then(doubleCheckUsername)
-    );
+    return DB.exec(r.branch(checkAvailability, reportInUse, changeName));
 
-    function checkUsername() {
-        return DB
-            .exec(table(r).filter({username: name}).limit(1))
-            .then(DB.first)
-            .then(function(user) {
-                if (user && user.id === userId) throw new Error(SameNameError);
-                if (user) throw new Error(AlreadyTakenError);
-            })
-            .then(function() {
-                return DB
-                    .exec(table(r).get(userId)('username'))
-                    .then(DB.first);
-            });
-    }
-
-    function changeUsername(oldName) {
-        return DB
-            .exec(table(r).get(userId).update({username: name}))
-            .then(function() {
-                return oldName
-            });
-    }
-
-    function doubleCheckUsername(oldName) {
-        return DB
-            .exec(table(r).filter({username: name}))
-            .then(DB.toArray)
-            .then(function(array) {
-                if (array.length > 1) return revert(oldName);
-                return array[0];
-            });
-    }
-
-    function revert(oldName) {
-        return DB
-            .exec(table(r).get(userId).update({username: oldName}))
-            .then(function() { throw new Error(AlreadyTakenError); });
-    }
 };
 
 Users.getUsers = function(location, callback) {
