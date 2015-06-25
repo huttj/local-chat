@@ -1,5 +1,6 @@
-var log = require('./log');
-var r   = require('rethinkdb');
+var log     = require('./log');
+var r       = require('rethinkdb');
+var Promise = require('bluebird');
 
 // Repositories
 var Users    = require('./repositories/users');
@@ -10,32 +11,23 @@ var Chats    = require('./repositories/chats');
 var conn, CONST;
 
 module.exports = function connectToDb(config, _CONST) {
-    var options;
-    if (config) {
-        options = config.db;
-    } else {
-        options = {
-            host: '45.55.136.206'
-        };
-    }
+    var options = config.db;
     CONST = _CONST;
 
     // connect and return db instance
     var dbPromise = r.connect(options)
-            .tap(setupDb)
-            .then(saveConnection)
-            .then(function() {
+            .tap(saveConnection)
+            .tap(function() {
                 conn.use(CONST.DB.NAME);
-                return r;
             });
 
     var DB = {
         load: function (fn) {
             return dbPromise.then(fn);
         },
-        exec: function (obj) {
+        exec: function (query, callback) {
             return dbPromise.then(function () {
-                return obj.run(conn);
+                return query.run(conn, callback);
             });
         },
         conn: conn,
@@ -51,7 +43,8 @@ module.exports = function connectToDb(config, _CONST) {
 
     return {
         Users: Users(DB),
-        Chats: Chats(DB)
+        Chats: Chats(DB),
+        DB: DB
         //Messages: Messages(
     };
 };
@@ -93,53 +86,3 @@ function newVals(update) {
     }
 }
 function nil() {}
-
-function setupDb(connection) {
-    // Check if the db exists
-    // Create it if it doesn't
-    // Check if the tables exist
-    // Create them if they don's
-
-    return getDbs()
-        .then(checkAndCreateDbs)
-        .then(getTables)
-        .then(checkTables);
-
-    function getDbs () {
-        return r.dbList().run(connection);
-    }
-
-    function checkAndCreateDbs(dbs) {
-        if (-1 === dbs.indexOf(CONST.DB.NAME)) {
-            log('creating database', CONST.DB.NAME);
-            return r.dbCreate(CONST.DB.NAME).run(connection)
-        } else {
-            log('database already exists', CONST.DB.NAME);
-        }
-    }
-
-    function getTables() {
-        return r.db(CONST.DB.NAME).tableList().run(connection);
-    }
-
-    function checkTables(tables) {
-        var promise;
-        for (var key in CONST.DB.TABLES) {
-
-            var tableName = CONST.DB.TABLES[key];
-
-            if (-1 === tables.indexOf(tableName)) {
-
-                var thisPromise = r.db(CONST.DB.NAME).tableCreate(tableName).run(connection);
-
-                if (promise) {
-                    promise = promise.then(thisPromise);
-                } else {
-                    promise = thisPromise;
-                }
-            }
-        }
-        return promise;
-    }
-
-}

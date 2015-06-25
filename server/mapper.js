@@ -8,7 +8,7 @@ var API_KEY;
 var Mapper = {};
 
 Mapper.lookupLocation = function lookupLocation(coords, callback) {
-    return Promise.try(function(resolve, reject) {
+    return new Promise(function(resolve, reject) {
             // Check for invalid values
             if (!coords || !coords.latitude || !coords.longitude) throw ('`coords` object must have latitude and longitude properties');
             if (Math.abs(coords.latitude) > 90 || Math.abs(coords.longitude) > 180) throw ('latitude must be between -90 to 90, longitude between -180 and 180');

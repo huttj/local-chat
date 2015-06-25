@@ -1,5 +1,7 @@
-var DB;
+var r = require('rethinkdb');
 var CONST = require('./../constants');
+var DB;
+
 var Messages = {};
 
 Messages.send = function(senderId, recipientId, message, location) {
@@ -66,11 +68,10 @@ Messages.watchPosts = function(location) {
 };
 
 function table(r) {
-    return r.db(CONST.DB).table(CONST.TABLES.MESSAGES);
+    return r.db(CONST.DB.NAME).table(CONST.DB.TABLES.MESSAGES);
 }
 
-module.exports = function(_DB, _helpers) {
+module.exports = function(_DB) {
     DB      = _DB;
-    helpers = _helpers;
     return Messages;
 };

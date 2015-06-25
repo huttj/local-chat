@@ -1,7 +1,10 @@
 var r = require('rethinkdb');
 var Promise = require('bluebird');
 var CONST = require('../server/constants');
-var config = require('../config');
+
+var ENV = process.argv[2] || 'DEV';
+var config = require('./../config')[ENV];
+
 var log = console.log.bind(console);
 var conn;
 
@@ -17,19 +20,13 @@ function setupDb(isTest) {
         DB_NAME = 'Test';
     }
 
-    var options;
-    if (config && config.db) {
-        options = config.db;
-    } else {
-        options = {
-            host: '45.55.136.206'
-        };
-    }
+    var options = config.db;
 
-    log('connecting to rethinkdb server at', options.host);
+    log('connecting to rethinkdb server at', options);
     r.connect(options)
         .then(saveConnection)
         .then(listTables)
+        .then(destroyDatabase)
         .then(createDatabase)
         .then(createTables)
         .then(addIndexes)
@@ -45,56 +42,78 @@ function setupDb(isTest) {
         return r.dbList().run(conn);
     }
 
-    function createDatabase(list) {
-        if (list.indexOf(DB_NAME) === -1) {
-            log('creating database', DB_NAME);
-            return r.dbCreate(DB_NAME).run(conn)
+    function destroyDatabase(list) {
+        if (list.indexOf(DB_NAME) !== -1) {
+            log('destroying database', DB_NAME);
+            return r.dbDrop(DB_NAME).run(conn)
                 .then(function () {
                     conn.use(DB_NAME);
                 });
-        } else {
-            log('database', DB_NAME, 'already exists');
         }
+    }
+
+    function createDatabase() {
+        log('creating database', DB_NAME);
+        return r.dbCreate(DB_NAME).run(conn)
+            .then(function () {
+                conn.use(DB_NAME);
+            });
     }
 
     function createTables() {
         log('getting table list for', DB_NAME);
         return r.db(DB_NAME).tableList().run(conn)
             .then(function (tableList) {
+
                 console.log(tableList);
-                Object.keys(CONST.DB.TABLES).forEach(function(TABLE) {
+
+                var tableCreation = Object.keys(CONST.DB.TABLES).reduce(function(l, TABLE) {
                     var table = CONST.DB.TABLES[TABLE];
                     if (tableList.indexOf(table) === -1) {
                         log('creating table', table);
-                        r.tableCreate(table).run(conn);
+                        l.push(r.tableCreate(table).run(conn));
                     } else {
                         log('table', table, 'already exists');
                     }
-                });
+                    return l;
+                }, []);
+
+                return Promise.all(tableCreation);
             });
     }
 
-    function addIndexes(tablesPromise) {
-        if (!tablesPromise) tablesPromise = new Promise(function(r){r()});
-        var promises = [];
+    function addIndexes() {
+        var createIndexPromises = [];
+
         for (var TABLE in CONST.DB.TABLES) {
-            var table = CONST.DB.TABLES[TABLE];
-            if (CONST.DB.INDEXES[TABLE].length > 0) {
+
+            var table   = CONST.DB.TABLES[TABLE];
+            var indexes = CONST.DB.INDEXES[TABLE];
+
+            if (indexes.length > 0) {
+
                 log('adding indexes for table', table);
+
+                indexes.forEach(function(index) {
+
+                    log('adding index on `' + index + '` for table `' + table + '`');
+
+                    var createIndex = r.db(DB_NAME).table(table).indexCreate(index).run(conn)
+                        .catch(indexError.bind(null, index, table));
+
+                    createIndexPromises.push(createIndex);
+                });
+
             } else {
                 log('no indexes specified for table', table);
             }
-            for (var i = 0; i < CONST.DB.INDEXES[TABLE].length; i++) {
-                var index = CONST.DB.INDEXES[TABLE][i];
-                log('adding index on `' + index + '` for table `' + table + '`');
-                promises.push(tablesPromise.then(function() {
-                    return r.db(DB_NAME).table(table).indexCreate(index).run(conn).catch(function () {
-                        log('index `' + index + '` already exists on table `' + table + '`');
-                    });
-                }));
-            }
         }
-        return Promise.all(promises);
+
+        return Promise.all(createIndexPromises);
+    }
+
+    function indexError(index, table, e) {
+        log('index `' + index + '` already exists on table `' + table + '`', e);
     }
 }
 

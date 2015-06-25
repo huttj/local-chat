@@ -1,75 +1,60 @@
-var DB;
+var r = require('rethinkdb');
 var CONST = require('./../constants');
+var DB;
+
 var Chats= {};
 
-Chats.post = function(userId, chat, location) {
+Chats.sendChat = function(userId, body, location) {
     var payload = {
-        userId: userId,
-        chat: chat,
-        location: location,
-        sentOn: Number(new Date())
+        userId   : userId,
+        body     : body,
+        location : location,
+        sentOn   : Number(new Date())
     };
 
-    return DB.load(function (r) {
-        return DB.exec(
-            table(r).insert(payload)
-        );
-    });
+    return DB.exec(table(r).insert(payload));
 };
 
-Chats.getPosts = function(location) {
-    return DB.load(function (r) {
-        return DB.exec(
-            table(r)
-                .filter(r.row('location').eq(location).and(r.row.hasFields('sentOn')))
-                .orderBy(r.desc('sentOn'))
-                .eqJoin('userId', r.db(CONST.DB).table(CONST.TABLES.USERS))
-                .zip()
-                .map(function(n) {
-                    return {
-                        chatId   : n('id'),
-                        userId   : n('userId'),
-                        chat     : n('chat'),
-                        sentOn   : n('sentOn'),
-                        location : n('location'),
-                        username : n('username')
-                    }
-                })
-        )
-            .then(DB.toArray);
-    })
+Chats.getChats = function(location) {
+    return DB.exec(
+        table(r)
+            .filter(r.row('location').eq(location).and(r.row.hasFields('sentOn'))) // Todo(Joshua): Filter on time / count
+            .orderBy(r.asc('sentOn'))
+            .map(function(n) {
+                return n.merge(r.db(CONST.DB.NAME).table(CONST.DB.TABLES.USERS).get(n('userId')).pluck('username'))
+            })
+    ).then(DB.toArray);
 };
 
-Chats.watchPosts = function(location) {
-    return DB.load(function (r) {
-        return DB.exec(
-            table(r)
-                .filter(r.row('location').eq(location))
-                .orderBy(r.desc('sentOn'))
-                .eqJoin('userId', r.db(CONST.DB).table(CONST.TABLES.USERS))
-                .zip()
-                .map(function(n) {
-                    return {
-                        chatId   : n('id'),
-                        userId   : n('userId'),
-                        chat     : n('chat'),
-                        sentOn   : n('sentOn'),
-                        location : n('location'),
-                        username : n('username')
-                    }
-                })
-                .changes()
-        )
-            .then(DB.toArray);
-    });
+Chats.watchChats = function(location, callback) {
+    var query = table(r)
+        .filter(r.row('location').eq(location))
+        .changes().getField('new_val')
+        .map(function(n) {
+            return n.merge(r.db(CONST.DB.NAME).table(CONST.DB.TABLES.USERS).get(n('userId')).pluck('username'))
+        });
+
+    return DB.exec(query)
+        .then(function(cursor) {
+            cursor.each(callback);
+            return cursor;
+        });
+};
+
+
+Chats.changeUsername = function(userId, username) {
+    return DB.exec(
+        table(r)
+            .filter({ userId: userId })
+            .update({ username: username })
+    );
 };
 
 function table(r) {
-    return r.db(CONST.DB).table(CONST.TABLES.CHATS);
+    return r.db(CONST.DB.NAME).table(CONST.DB.TABLES.CHATS);
 }
 
-module.exports = function(_DB, _helpers) {
+module.exports = function(_DB) {
     DB      = _DB;
-    helpers = _helpers;
     return Chats;
 };

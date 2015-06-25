@@ -1,6 +1,11 @@
 var ENV = process.argv[2] || 'DEV';
+var config = require('./config')[ENV];
 
-var config = require('./config.js')[ENV];
+//if (ENV === 'DEV') {
+//    var fork = require('child_process').fork;
+//    fork('./node_modules/reqlite/bin/reqlite');
+//}
+
 var CONST  = require('./server/constants');
 
 var DB     = require('./server/db')(config, CONST);
