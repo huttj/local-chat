@@ -1,0 +1,163 @@
+<!doctype html>
+<html>
+<head>
+    <title>LocalChat</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+
+<style>
+    body {
+        margin: 0;
+    }
+    #queue {
+        position: absolute;
+        max-height: 95%;
+        max-height: calc(100% - 4em);
+        overflow: auto;
+        padding: .5em;
+        word-break: break-word;
+    }
+    .writer {
+        position: absolute;
+        bottom: 0;
+        margin: .5em;
+    }
+</style>
+
+<body>
+
+<select id="location"></select>
+<div id="queue"></div>
+<div class="writer">
+    <input id="input" type="text"/>
+    <button id="submit">Send</button>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+    var MAX_LENGTH = 100;
+    //var socket = io('http://107.170.252.81:3030');
+    var socket = io('http://localhost:5000');
+
+    socket.on('connect', register);
+
+    socket.send = function send(event, payload, cb) {
+        socket.emit('event', {
+            type: event,
+            payload: payload
+        }, cb);
+    };
+
+    var events = {
+        setLocation: function setLocation(location) {
+            console.log(location);
+            post(location);
+        },
+        getLocation: function getLocation(location) {
+            var locations = location.slice(1,location.length-1).reverse().reduce(function(l, n, i) {
+                l.push({
+                    name: n.long_name,
+                    code: (l[i-1] ? l[i-1].code + ' ' : '') + n.short_name
+                });
+                return l;
+            }, []);
+            updateSelector(locations);
+            socket.send('setLocation', locations[locations.length-2] || locations[locations.length-1]);
+        },
+        message: function message(data) {
+                console.log(data);
+                var msg = now(data.sent) + ' ' + data.message;
+                console.log(msg);
+
+                if (data.you) {
+                    msg = now(data.sent) + ' <strong>' + data.message + '</strong>';
+                }
+
+                if (!data.sameLevel) {
+                    msg = now(data.sent) + ' <em>' + data.message + '</em>';
+                }
+
+                post(msg);
+            }
+    };
+
+
+    var $selector = document.getElementById('location');
+
+    $selector.addEventListener('change', function(e) {
+        var name = $selector.selectedOptions[0].innerText;
+        var code = $selector.value;
+        socket.send('set location', { name: name, code: code });
+    });
+
+    function register() {
+        socket.send('');
+    }
+
+    function updateSelector(locations) {
+        $selector.innerHTML = locations.map(function(n) {
+            return '<option value="' + n.code + '">' + n.name + '</option>';
+        });
+        $selector.selectedIndex = $selector.options.length - 2;
+    }
+
+    function send(msg) {
+        socket.send('message', { message: msg });
+    }
+
+    function now(time) {
+        var date = time ? new Date(time) : new Date();
+        return date.toLocaleTimeString();
+    }
+
+    function getLocation() {
+        var _watch = navigator.geolocation.watchPosition(success, failure);
+
+        function success(position) {
+            console.log(position);
+            navigator.geolocation.clearWatch(_watch);
+            socket.send('getLocation', position);
+        }
+
+        function failure(error) {
+            navigator.geolocation.clearWatch(_watch);
+            console.log(error, error.code);
+        }
+    }
+
+    var queue = [];
+
+    function post(message) {
+        if (queue.length > MAX_LENGTH) {
+            queue.shift();
+        }
+        queue.push(message);
+        render();
+    }
+
+    var $ = document.getElementById.bind(document);
+
+    var $queue  = $('queue');
+    var $input  = $('input');
+    var $submit = $('submit');
+
+    $input.addEventListener('keyup', function(e) {
+        if (e.which === 13) {
+            send($input.value);
+            $input.value = '';
+        }
+    });
+
+    $submit.addEventListener('click', function() {
+        send($input.value);
+        $input.value = '';
+    });
+
+    function render() {
+        $queue.innerHTML = queue.join('</br>');
+        $input.value = '';
+    }
+
+</script>
+</body>
+</html>
